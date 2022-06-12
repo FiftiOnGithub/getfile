@@ -1,0 +1,17 @@
+function rand( sArg )
+if sArg == nil then
+  error("Length too short")
+  return 0
+end
+ 
+local all = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+local e = ""
+ 
+while sArg >= 1 do
+  local r = math.random(#all)
+  e = e.. string.sub(all, r, r)
+  sArg = sArg - 1
+end
+ 
+return e
+end
