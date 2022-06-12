@@ -1101,7 +1101,7 @@ end
 --
 -- mode and keyLength must be the same for encryption and decryption.
 --
-local function ext_encrypt(password, data, keyLength, mode, iv)
+function ext_encrypt(password, data, keyLength, mode, iv)
 	assert(password ~= nil, "Empty password.")
 	assert(password ~= nil, "Empty data.")
 
@@ -1137,7 +1137,7 @@ end
 --
 -- mode and keyLength must be the same for encryption and decryption.
 --
-local function ext_decrypt(password, data, keyLength, mode, iv)
+function ext_decrypt(password, data, keyLength, mode, iv)
 	local mode = mode or CBCMODE
 	local keyLength = keyLength or AES128
 
