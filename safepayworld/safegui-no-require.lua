@@ -17,7 +17,10 @@ function printCentered(sText)
 end
 
 if not fs.exists(".spcreds") then
-  print("The SafePay credentials file does not exist on this device. It cannot be used to log into safepay.")
+  while true do
+    print("The SafePay credentials file does not exist on this device. It cannot be used to log into safepay.")
+    sleep(5)
+  end
   return
 end
 local encryptedinfohandler = fs.open(".spcreds","r")
