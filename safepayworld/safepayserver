@@ -2,34 +2,6 @@ rednet.open("back")
 os.loadAPI("aeslua")
 os.loadAPI("randomword")
 local SERVER_ID = "540"
---[[local ACCOUNTS = {
-	ACC915 = {
-		privkey = "abc",
-		balance = 100,
-		owners = {
-			"Fifti"
-		},
-		kind = "consumer"
-	},
-	ACC104 = {
-	
-		privkey = "def",
-		balance = 1000,
-		owners = {
-			"Fifti"
-		},
-		kind = "business"
-	}
-}
-local PAYCODES = {
-	XCKJL = {
-		amount = 20,
-		account = "ACC104",
-		created = os.clock(),
-		usecode = "asdkaw4i901"
-	}
-}
---]]
 local lastsave = os.clock()
 local acchandler = fs.open("spsusers","r")
 local ACCOUNTS = textutils.unserialise(acchandler.readAll())
