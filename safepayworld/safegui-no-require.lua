@@ -18,8 +18,11 @@ end
 
 if not fs.exists(".spcreds") then
   while true do
+    term.clear()
+    term.setBackgroundColor(colors.black)
+    term.setTextColor(colors.white)
+    term.setCursorPos(1,1)
     print("The SafePay credentials file does not exist on this device. It cannot be used to log into safepay.")
-    sleep(5)
   end
   return
 end
@@ -160,7 +163,7 @@ while true do
     term.write(message)
 
     local event,button,x,y = os.pullEvent("mouse_click")
-    if y >= 3 and y <= 7 then
+    if y ~= nil and (y >= 3 and y <= 7) then
       while true do
         term.setBackgroundColor(colordict.background)
         term.clear()
