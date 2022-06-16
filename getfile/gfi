@@ -1,0 +1,260 @@
+os.loadApi("aeslua")
+response = nil
+responder = nil
+function waitforpull()
+  return os.pullEvent("timer")
+end
+function waitforreceive()
+  responder, response = rednet.receive()
+end
+
+-- https://www.codegrepper.com/code-examples/lua/lua+split+string+by+space
+function split(s, delimiter)
+    result = {};
+    for match in (s..delimiter):gmatch("(.-)"..delimiter) do
+        table.insert(result, match);
+    end
+    return result;
+end
+
+-- https://stackoverflow.com/questions/2705793/how-to-get-number-of-entries-in-a-lua-table
+function tablelength(T)
+  local count = 0
+  for _ in pairs(T) do count = count + 1 end
+  return count
+end
+
+local modem = peripheral.find("modem", rednet.open) ~= nil
+args = {...}
+
+if #args == 0 then
+  error("Usage: gfi <get|put|encrypt|decrypt|host>")
+end
+
+if args[1] == "encrypt" or args[1] == "decrypt" then
+  if #args > 3 then
+    if not fs.exists(args[2]) then
+      error("File " .. args[2] .. " could not be found.")
+    end
+    if fs.exists(args[3]) then
+      error("File " .. args[3] .. " already exists.")
+    end
+    
+    local key = args[4]
+    
+    originfile = fs.open(args[2],"r")
+    text = originfile.readAll()
+    originfile.close()
+    local output = ""
+    if args[1] == "encrypt" then
+      output = ext_encrypt(key, text)
+    else
+      output = ext_decrypt(key, text)
+    end
+    
+    destfile = fs.open(args[3],"w")
+    destfile.write(output)
+    destfile.close()
+    print("Operation completed successfully")
+    
+  else
+    error("Usage: gfi <encrypt|decrypt> <origin-file> <destination-file> <key>")
+  end
+end
+
+if args[1] == "put" then
+  if #args > 1 then
+    local filename = args[2]
+    if not fs.exists(filename) then
+      error("File named " .. filename .. " could not be found.")
+    end
+    local handler = fs.open(filename, "r")
+    local filecontent = handler.readAll()
+    handler.close()
+    local protocol = args[3]
+    if protocol == nil then
+      protocol = "getfile"
+    end
+    filename = split(filename,"/")[#split(filename,"/")]
+    local request = {
+      requestid = math.random(100000,999999),
+      action = "u",
+      file = filename,
+      gfver = "VANILLA-1.0",
+      filecontent = filecontent
+    }
+    rednet.broadcast(request,protocol)
+    print("Sending upload request on protocol " .. protocol)
+    responsecount = 0
+    os.startTimer(3)
+    while true do
+      func = parallel.waitForAny(waitforpull, waitforreceive)
+      if func == 1 then
+        print("breaking")
+        break;
+      elseif func == 2 then
+        if response ~= nil then
+          if type(response) == "table" then
+          print(textutils.serialise(response))
+            if response["request"] ~= nil then
+              if response["code"] ~= nil then
+                if response["desc"] ~= nil then
+                  if response["gfver"] ~= nil then
+                    if response["request"]["requestid"] == request["requestid"] then
+                      print(response["code"] .. " from " .. responder .. ": " .. response["desc"]) 
+                      responsecount = responsecount + 1
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    if responsecount == 0 then
+      print("Request timeout, no responses.")
+    end
+  else
+    error("Usage: gfi put <filename> [protocol]")
+  end
+end
+
+if args[1] == "get" then
+  if #args > 1 then
+    local filename = args[2]
+    if fs.exists(filename) then
+      error("File named " .. filename .. " already exists on your machine.")
+    end
+    local protocol = args[3]
+    if protocol == nil then
+      protocol = "getfile"
+    end
+    filename = split(filename,"/")[#split(filename,"/")]
+    
+    
+    local request = {
+      requestid = math.random(100000,999999),
+      action = "d",
+      file = filename,
+      gfver = "VANILLA-1.0"
+    }
+    rednet.broadcast(request,protocol)
+    print("Requested file " .. filename .. " on protocol " .. protocol .. ". Waiting 3 seconds for responses...")
+    os.startTimer(3)
+    local responses = {}
+    local got200 = false
+    while true do
+      func = parallel.waitForAny(waitforpull, waitforreceive)
+      if func == 1 then
+        break;
+      elseif func == 2 then
+        if response ~= nil then
+          if type(response) == "table" then
+            if response["request"] ~= nil then
+              if response["code"] ~= nil then
+                if response["desc"] ~= nil then
+                  if response["gfver"] ~= nil then
+                    if response["request"]["requestid"] == request["requestid"] then
+                      print(response["code"] .. " from " .. responder .. ": " .. response["desc"]) 
+                      responses[responder] = response
+                      if response["code"] == 200 then
+                        got200 = true
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    if not got200 then
+      error("No 200-responses received, cannot download.")
+    end
+    print("Received a total of " .. tablelength(responses) .. " responses. Select the server you wish to download the file from:")
+    term.write("> ")
+    wish = read()
+    if tonumber(wish) == nil then
+      error("invalid server ID, must be a number.")
+    end
+    if responses[tonumber(wish)] ~= nil then
+      if responses[tonumber(wish)]["filecontent"] == nil then
+        error("That server's response did not contain a file.")
+      end
+      local handler = fs.open(filename,"w")
+      handler.write(responses[tonumber(wish)]["filecontent"])
+      handler.close()
+      print("Created and wrote file " .. filename)
+      
+    else
+      error("No response from that server was received")
+    end
+  else
+    error("Usage: gfi get <filename> [protocol]")
+  end
+end
+
+if args[1] == "host" then
+  print("Hosting getfile server. CTRL+T to halt.")
+  protocol = args[2]
+  if protocol == nil then
+    protocol = "getfile"
+  end
+  while true do
+    id, request = rednet.receive(protocol)
+    if id then
+      if type(request) == "table" then
+        if type(request["requestid"]) == "number" then
+          if type(request["action"]) == "string" then
+            if type(request["file"]) == "string" then
+              if type(request["gfver"]) == "string" then
+                response = {
+                  gfver = "VANILLA-1.0",
+                  request = request,
+                }
+                if string.match(request["file"], "/") then
+                  response["code"] = 401
+                  response["desc"] = "Illegal characters in request"
+                else
+                  if request["action"] == "u" then
+                    if fs.exists("getfile_server/"..request["file"]) then
+                      response["code"] = 400
+                      response["desc"] = "A file by that name already exists"
+                    else
+                      response["code"] = 200
+                      response["desc"] = "Successfully uploaded file to server"
+                      local handler = fs.open("getfile_server/"..request["file"],"w")
+                      handler.write(request["filecontent"])
+                      handler.close()
+                      print("wrote file " .. request["file"])
+                    end
+                    
+                    
+                    
+                  elseif request["action"] == "d" then
+                    if fs.exists("getfile_server/" .. request["file"]) then
+                      local filehandler = fs.open("getfile_server/"..request["file"],"r")
+                      local content = filehandler.readAll()
+                      filehandler.close()
+                      response["code"] = 200
+                      response["desc"] = "File found & sent"
+                      response["filecontent"] = content
+                      print("Sending file " .. request["file"] .. " to computer " .. id)
+                    else
+                      response["code"] = 404
+                      response["desc"] = "That file does not exist on this server."
+                    end
+                  end
+                end
+                rednet.broadcast(response,protocol)
+                
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end

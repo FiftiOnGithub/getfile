@@ -1,0 +1,139 @@
+modemside = "back"
+
+function getOTAC(aeslua, spukey, pubid, serverid)
+  local requestdata = {
+    action = "get_OTAC"
+  }
+  return sendRequest(requestdata,nil,aeslua,spukey,pubid,serverid)
+end
+
+function getAccountInformation(otac, aeslua, spukey, pubid, serverid)
+  local requestdata = {
+    action = "get_ACCOUNTINFO"
+  }
+  return sendRequest(requestdata,otac,aeslua,spukey,pubid,serverid)
+end
+
+function transferMoney(targetid,amount,otac, aeslua, spukey, pubid, serverid)
+  local requestdata = {
+    action = "transfer",
+    amount = amount,
+    targetid = targetid
+  }
+  return sendRequest(requestdata,otac,aeslua,spukey,pubid,serverid)
+end
+
+function checkPaycode(paycode,otac, aeslua, spukey, pubid, serverid)
+  local requestdata = {
+    action = "checkpaycode",
+    paycode = paycode
+  }
+  return sendRequest(requestdata,otac,aeslua,spukey,pubid,serverid)
+end
+
+function doPaycode(paycode,otac, aeslua, spukey, pubid, serverid)
+  local requestdata = {
+    action = "dopaycode",
+    paycode = paycode,
+  }
+  return sendRequest(requestdata,otac,aeslua,spukey,pubid,serverid)
+end
+
+function createPaycode(amount,otac,aeslua,spukey,pubid,serverid)
+  local requestdata = {
+    action = "createpaycode",
+    amount = amount
+  }
+  return sendRequest(requestdata,otac,aeslua,spukey,pubid,serverid)
+end
+
+function deletePaycode(code,otac,aeslua,spukey,pubid,serverid)
+  local requestdata = {
+    action = "deletepaycode",
+    code = code
+  }
+  return sendRequest(requestdata,otac,aeslua,spukey,pubid,serverid)
+end
+
+function createAccount(owner,kind,otac,aeslua,spukey,pubid,serverid)
+  local requestdata = {
+    action = "createaccount",
+    owners = owner,
+    kind = kind
+  }
+  return sendRequest(requestdata,otac,aeslua,spukey,pubid,serverid)
+end
+
+
+function sendRequest(requestdata,otac,aeslua,spukey,pubid,serverid)
+  local cookie = tostring(math.random(100000,999999))
+  requestdata["noise"] = math.random(10000,99999)
+  local requestdata_enc = aeslua.ext_encrypt(spukey, textutils.serialise(requestdata))
+  if otac ~= nil then
+    requestdata_enc = aeslua.ext_encrypt(spukey .. otac, textutils.serialise(requestdata))
+  end
+  sleep(1)
+  
+  local request = {
+    server = serverid,
+    clientid = pubid,
+    cookie = cookie,
+    encryption = "KEY_ONLY",
+    data = requestdata_enc
+  }
+  if otac ~= nil then request.encryption = "OTAC" end
+  sendObject(request)
+  local stoptime = os.clock() + 1
+  local response = "NONE"
+  local decrypted = "NONE"
+  
+  while os.clock() < stoptime do
+    local _,v = rednet.receive("SP_RESPONSE",0.1)
+    if type(v) == "table" then
+      if v.server == serverid then
+        if v.clientid == pubid then
+          
+          if type(v.data) == "string" then
+            local dec_data = ""
+            if v.encryption ~= "NONE" then
+              dec_data = aeslua.ext_decrypt(spukey, v.data)
+              if v.encryption == "OTAC" then
+                dec_data = aeslua.ext_decrypt(spukey .. otac, v.data)
+              end
+            else
+              dec_data = v.data
+            end
+            
+            if type(dec_data) == "string" then
+              if tostring(textutils.unserialise(dec_data)["cookie"]) == tostring(cookie) then
+                response = v
+                decrypted = dec_data
+                break
+              end
+            end
+            
+          end
+          
+        end
+      end
+    end
+    
+  end
+  
+  if response == "NONE" then
+    return "No server response"
+  end
+
+
+  if type(textutils.unserialise(decrypted).error) == "string" then
+    return "Server Error: " .. textutils.unserialise(decrypted).error
+  end
+  
+  return textutils.unserialise(decrypted)
+end
+
+function sendObject(object)
+  rednet.open(modemside)
+  rednet.broadcast(object, "SP_GLOBAL")
+end
+

@@ -1,0 +1,363 @@
+rednet.open("back")
+os.loadAPI("aeslua")
+os.loadAPI("randomword")
+local SERVER_ID = "540"
+--[[local ACCOUNTS = {
+	ACC915 = {
+		privkey = "abc",
+		balance = 100,
+		owners = {
+			"Fifti"
+		},
+		kind = "consumer"
+	},
+	ACC104 = {
+	
+		privkey = "def",
+		balance = 1000,
+		owners = {
+			"Fifti"
+		},
+		kind = "business"
+	}
+}
+local PAYCODES = {
+	XCKJL = {
+		amount = 20,
+		account = "ACC104",
+		created = os.clock(),
+		usecode = "asdkaw4i901"
+	}
+}
+--]]
+local lastsave = os.clock()
+local acchandler = fs.open("spsusers","r")
+local ACCOUNTS = textutils.unserialise(acchandler.readAll())
+local pchandler = fs.open("spspaycodes","r")
+local PAYCODES = textutils.unserialise(pchandler.readAll())
+acchandler.close()
+pchandler.close()
+
+function sendError(encryption,cookie,otac,message,clientid)
+	local data = {
+		error = message,
+		cookie = cookie
+	}
+
+	local content = {
+		server = SERVER_ID,
+		clientid = clientid,
+		encryption = encryption,
+	}
+	
+	if encryption == "KEY_ONLY" then
+		content.data = aeslua.ext_encrypt(ACCOUNTS[clientid].privkey, textutils.serialise(data))
+	elseif encryption == "OTAC" then
+		content.data = aeslua.ext_encrypt(ACCOUNTS[clientid].privkey..otac, textutils.serialise(data))
+	elseif encryption == "NONE" then
+		content.data = textutils.serialise(data)
+	end
+	rednet.broadcast(content, "SP_RESPONSE")
+end
+
+while true do
+	
+	if os.clock() - lastsave > 60 then
+		
+		local acchandler = fs.open("spsusers","w")
+		acchandler.write(textutils.serialise(ACCOUNTS))
+		local pchandler = fs.open("spspaycodes","w")
+		pchandler.write(textutils.serialise(PAYCODES))
+		acchandler.close()
+		pchandler.close()
+		print("Saved users & paycodes. " .. os.clock() .. ", " .. lastsave)
+		lastsave = os.clock()
+	end
+
+	id,msg = rednet.receive("SP_GLOBAL")
+	print("got message from " .. id)
+	if type(msg) == "table" and type(msg.server) == "string" and msg.server == SERVER_ID and type(msg.data) == "string" and type(msg.clientid) == "string" and type(msg.encryption) == "string" and type(msg.cookie) == "string" then
+		if type(ACCOUNTS[msg.clientid]) == "table" then
+			local request_cookie = msg.cookie;
+			local decdata = {};
+			local request_otac = "";
+			redstone.setOutput("top",true)
+			sleep(0.05)
+			redstone.setOutput("top",false)
+			
+			
+			if msg.encryption == "KEY_ONLY" then
+				decdata = aeslua.ext_decrypt(ACCOUNTS[msg.clientid]["privkey"], msg.data)
+			elseif msg.encryption == "OTAC" then
+				if ACCOUNTS[msg.clientid]["otac"] == nil then
+					sendError("KEY_ONLY",request_cookie,nil,"No OTA code for account",msg.clientid)
+					decdata = "SKIP"
+				else
+					decdata = aeslua.ext_decrypt(ACCOUNTS[msg.clientid]["privkey"] .. ACCOUNTS[msg.clientid]["otac"], msg.data)
+					request_otac = ACCOUNTS[msg.clientid]["otac"]
+					ACCOUNTS[msg.clientid]["otac"] = nil
+				end
+			end
+			
+			if decdata == nil then
+				sendError("NONE",request_cookie,nil,"Could not decrypt with key",msg.clientid)
+				decdata = "SKIP"
+			end
+			decdata = textutils.unserialise(decdata)
+			
+			if decdata ~= "SKIP" then
+				if type(decdata) == "table" then
+					if type(decdata.action) == "string" then
+						if decdata.action == "get_OTAC" then
+							local data = {
+								otac = randomword.rand(20),
+								balance = ACCOUNTS[msg.clientid]["balance"],
+								cookie = request_cookie
+							}
+							if ACCOUNTS[msg.clientid]["otac"] ~= nil then
+								data["otac"] = ACCOUNTS[msg.clientid]["otac"]
+							else
+								ACCOUNTS[msg.clientid]["otac"] = data["otac"]
+							end
+							rednet.broadcast({
+								server = SERVER_ID,
+								clientid = msg.clientid,
+								encryption = "KEY_ONLY",
+								data = aeslua.ext_encrypt(ACCOUNTS[msg.clientid]["privkey"], textutils.serialise(data))
+							}, "SP_RESPONSE")
+						elseif decdata.action == "get_ACCOUNTINFO" and msg.encryption == "OTAC" then
+							local data = {
+								balance = ACCOUNTS[msg.clientid].balance,
+								kind = ACCOUNTS[msg.clientid].kind,
+								owners = ACCOUNTS[msg.clientid].owners,
+								history = ACCOUNTS[msg.clientid].history,
+								cookie = request_cookie
+							}
+							rednet.broadcast({
+								server = SERVER_ID,
+								clientid = msg.clientid,
+								encryption = "OTAC",
+								data = aeslua.ext_encrypt(ACCOUNTS[msg.clientid]["privkey"] .. request_otac, textutils.serialise(data))
+							}, "SP_RESPONSE")
+							
+						elseif decdata.action == "transfer" and msg.encryption == "OTAC" then
+							if type(decdata.targetid) == "string" and type(decdata.amount) == "number" then
+								if type(ACCOUNTS[decdata.targetid]) == "table" then
+									if (ACCOUNTS[decdata.targetid].kind == "consumer" and ACCOUNTS[msg.clientid].kind == "consumer") or (ACCOUNTS[msg.clientid].owner == ACCOUNTS[decdata.targetid].owner) then
+									
+										if ACCOUNTS[msg.clientid].balance >= decdata.amount and decdata.amount > 0 then
+											
+											ACCOUNTS[msg.clientid].balance = ACCOUNTS[msg.clientid].balance - decdata.amount
+											ACCOUNTS[decdata.targetid].balance = ACCOUNTS[decdata.targetid].balance + decdata.amount
+											
+											
+											local otac = randomword.rand(20)
+											if ACCOUNTS[msg.clientid].otac ~= nil then
+												otac = ACCOUNTS[msg.clientid].otac
+											else ACCOUNTS[msg.clientid].otac = otac end
+											
+											local data = {
+												otac = otac,
+												message = "Success",
+												cookie = request_cookie,
+												newbalance = ACCOUNTS[msg.clientid].balance
+											}
+											
+											rednet.broadcast({
+												server = SERVER_ID,
+												clientid = msg.clientid,
+												encryption = "OTAC",
+												data = aeslua.ext_encrypt(ACCOUNTS[msg.clientid]["privkey"] .. request_otac, textutils.serialise(data))
+											}, "SP_RESPONSE")
+										else
+											sendError("OTAC",request_cookie,request_otac,"Your account has insufficient funds.",msg.clientid)
+										end
+									else 
+										sendError("OTAC",request_cookie,request_otac,"Transfers can only be done between personal accounts.",msg.clientid)
+									end
+								else
+									sendError("OTAC",request_cookie,request_otac,"Target account does not exist",msg.clientid)
+								end
+							else
+								sendError("OTAC",request_cookie,request_otac,"Malformed request",msg.clientid)
+							end
+							
+							
+						elseif decdata.action == "checkpaycode" and msg.encryption == "OTAC" and ACCOUNTS[msg.clientid].kind == "consumer" then
+							if type(decdata.paycode) == "string" then
+								if type(PAYCODES[decdata.paycode]) == "table" then
+										
+									local otac = randomword.rand(20)
+									if ACCOUNTS[msg.clientid].otac ~= nil then
+										otac = ACCOUNTS[msg.clientid].otac
+									else ACCOUNTS[msg.clientid].otac = otac end
+								
+									local data = {
+										otac = otac,
+										amount = PAYCODES[decdata.paycode].amount,
+										cookie = request_cookie
+									}
+									rednet.broadcast({
+										server = SERVER_ID,
+										clientid = msg.clientid,
+										encryption = "OTAC",
+										data = aeslua.ext_encrypt(ACCOUNTS[msg.clientid]["privkey"] .. request_otac, textutils.serialise(data))
+									}, "SP_RESPONSE")
+								
+									
+								else
+									sendError("OTAC", request_cookie, request_otac, "Target paycode does not exist or has expired.",msg.clientid)
+								end
+							end
+							
+							
+						elseif decdata.action == "dopaycode" and msg.encryption == "OTAC" and ACCOUNTS[msg.clientid].kind == "consumer" then
+							if type(decdata.paycode) == "string" then
+								if type(PAYCODES[decdata.paycode]) == "table" then
+									
+									if ACCOUNTS[msg.clientid].balance >= PAYCODES[decdata.paycode].amount then
+										
+										ACCOUNTS[msg.clientid].balance = ACCOUNTS[msg.clientid].balance - PAYCODES[decdata.paycode].amount;
+										ACCOUNTS[PAYCODES[decdata.paycode].account].balance = ACCOUNTS[PAYCODES[decdata.paycode].account].balance + PAYCODES[decdata.paycode].amount;
+										
+										local otac = randomword.rand(20)
+										if ACCOUNTS[msg.clientid].otac ~= nil then
+											otac = ACCOUNTS[msg.clientid].otac
+										else ACCOUNTS[msg.clientid].otac = otac end
+										
+										local data = {
+											otac = otac,
+											message = "Success",
+											cookie = request_cookie,
+											newbalance = ACCOUNTS[msg.clientid].balance
+										}
+										
+										rednet.broadcast({
+											server = SERVER_ID,
+											clientid = msg.clientid,
+											encryption = "OTAC",
+											data = aeslua.ext_encrypt(ACCOUNTS[msg.clientid]["privkey"] .. request_otac, textutils.serialise(data))
+										}, "SP_RESPONSE")
+										data = {
+											message = "Paycode used",
+											usecode = PAYCODES[decdata.paycode]["usecode"]
+										}
+										rednet.broadcast({
+											server = SERVER_ID,
+											encryption = "NONE",
+											data = data
+										}, "SP_RESPONSE")
+										PAYCODES[decdata.paycode] = nil;
+									else 
+										sendError("OTAC",request_cookie,request_otac,"Your account has insufficient funds.",msg.clientid)
+									end
+									
+								else
+									sendError("OTAC",request_cookie,request_otac,"Target paycode does not exist or has expired.",msg.clientid)
+								end
+							end
+						elseif decdata.action == "createpaycode" and msg.encryption == "OTAC" and ACCOUNTS[msg.clientid].kind == "business" then
+							if type(decdata.amount) == "number" then
+								if ACCOUNTS[msg.clientid].balance >= 0 - decdata.amount then
+									local id = randomword.rand(5,"ABCDEFGHJMNPRSTVXYZ2456789")
+									PAYCODES[id] = {
+										amount = decdata.amount,
+										account = msg.clientid,
+										created = os.clock(),
+										usecode = randomword.rand(20)
+									}
+									local otac = randomword.rand(20)
+									if ACCOUNTS[msg.clientid].otac ~= nil then
+										otac = ACCOUNTS[msg.clientid].otac
+									else ACCOUNTS[msg.clientid].otac = otac end
+									local data = {
+										message = "Success",
+										otac = otac,
+										code = id,
+										cookie = request_cookie,
+										usecode = PAYCODES[id].usecode
+									}
+									
+									rednet.broadcast({
+										server = SERVER_ID,
+										clientid = msg.clientid,
+										encryption = "OTAC",
+										data = aeslua.ext_encrypt(ACCOUNTS[msg.clientid]["privkey"] .. request_otac, textutils.serialise(data))
+									}, "SP_RESPONSE")
+								else
+									sendError("OTAC",request_cookie,request_otac,"Insufficient funds",msg.clientid)
+								end
+							end
+		
+						elseif decdata.action == "createaccount" and msg.encryption == "OTAC" and ACCOUNTS[msg.clientid].kind == "admin" then
+							if type(decdata.owner) == "string" and type(decdata.kind) == "string" then
+								local accid = "ACC"..math.random(10000,99999)
+								local privkey = randomword.rand(30)
+								
+								
+								local otac = randomword.rand(20)
+								if ACCOUNTS[msg.clientid].otac ~= nil then
+									otac = ACCOUNTS[msg.clientid].otac
+								else ACCOUNTS[msg.clientid].otac = otac end
+								
+								ACCOUNTS[accid] = {
+									id = accid,
+									privkey = privkey,
+									balance = 100,
+									owner = decdata.owner,
+									kind = decdata.kind,
+									cookie = request_cookie,
+									otac = otac
+								}
+								
+								rednet.broadcast({
+									server = SERVER_ID,
+									clientid = msg.clientid,
+									encryption = "OTAC",
+									data = aeslua.ext_encrypt(ACCOUNTS[msg.clientid]["privkey"] .. request_otac, textutils.serialise(ACCOUNTS[accid]))
+								}, "SP_RESPONSE")
+								ACCOUNTS[accid].otac = nil
+								ACCOUNTS[accid].cookie = nil
+							end
+						elseif decdata.action == "deletepaycode" and msg.encryption == "OTAC" and ACCOUNTS[msg.clientid].kind == "business" then
+							if type(decdata.code) == "string" then
+								if type(PAYCODES[decdata.code]) == "table" then
+									if PAYCODES[decdata.code].account == msg.clientid then
+										PAYCODES[decdata.code] = nil
+										
+										local otac = randomword.rand(20)
+										if ACCOUNTS[msg.clientid].otac ~= nil then
+											otac = ACCOUNTS[msg.clientid].otac
+										else ACCOUNTS[msg.clientid].otac = otac end
+										
+										local data = {
+											message = "Success",
+											cookie = request_cookie,
+											otac = otac
+										}
+										rednet.broadcast({
+											server = SERVER_ID,
+											clientid = msg.clientid,
+											encryption = "OTAC",
+											data = aeslua.ext_encrypt(ACCOUNTS[msg.clientid]["privkey"] .. request_otac, textutils.serialise(data))
+										}, "SP_RESPONSE")
+										
+									else
+										sendError("OTAC",request_cookie,request_otac,"Paycode not owned by your account",msg.clientid)
+									end
+								else
+									sendError("OTAC",request_cookie,request_otac,"Paycode not found",msg.clientid)
+								end
+							end
+						end
+						
+					end
+				end
+				
+			end
+			
+		else
+			sendError("NONE",nil,"Your account could not be found.",msg.clientid)
+		end
+	end
+end

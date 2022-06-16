@@ -1,0 +1,91 @@
+function split(self,delimiter)
+  local result = { }
+  local from  = 1
+  local delim_from, delim_to = string.find( self, delimiter, from  )
+  while delim_from do
+    table.insert( result, string.sub( self, from , delim_from-1 ) )
+    from  = delim_to + 1
+    delim_from, delim_to = string.find( self, delimiter, from  )
+  end
+  table.insert( result, string.sub( self, from  ) )
+  return result
+end
+
+local function attemptNewPage(printer,title)
+  if printer.getInkLevel() < 1 then
+    return false,"No ink"
+  end
+  
+  if printer.getPaperLevel() < 1 then
+    return false,"No paper"
+  end
+  printer.newPage()
+  return true,nil
+end
+
+function printtext(title,text)
+  local printerside = ""
+  for k,v in pairs(peripheral.getNames()) do
+    if peripheral.getType(v) == "printer" then
+      printerside = v
+      break
+    end
+  end
+  if printerside == "" then 
+    return false,"No printer connected"
+  end
+  local printer = peripheral.wrap(printerside)
+  
+  local s,e = attemptNewPage(printer,title)
+  if not s then return s,e end
+  local w,h = printer.getPageSize()
+  local newtext = split(text,"\n")
+  local x = 1
+  local y = 1
+  local cpos = 1
+  local line = ""
+  
+  for _,v in pairs(newtext) do
+    
+    for i=cpos,#v+1,1 do
+      if v:sub(i,i) == " " or v:sub(i,i) == "" or (i-cpos + 1) > w then
+      
+        if x + ( i - cpos) >= w or #line + (i - cpos) >= w then
+          printer.setCursorPos(1,y)
+          printer.write(line)
+        
+          x = 1
+          y = y + 1
+          if y > h then
+            local s,e = attemptNewPage(printer,title)
+            if not s then return s,e end
+            y = 1
+          end
+          line = ""
+        end
+        line = line .. v:sub(cpos,i)
+        x = x + (i - cpos)
+        cpos = i + 1
+      end
+    end
+    printer.setCursorPos(1,y)
+    printer.write(line)
+    y = y + 1
+    if y > h then
+      local s,e = attemptNewPage(printer,title)
+      if not s then return s,e end
+      y = 1
+    end
+    x = 1
+    line = ""
+    cpos = 0
+    
+  end
+  
+  printer.setCursorPos(1,y)
+  printer.write(line)
+  
+  printer.endPage()
+  return true,nil
+end
+
