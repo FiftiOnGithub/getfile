@@ -163,7 +163,7 @@ while true do
     term.write(message)
 
     local event,button,x,y = os.pullEvent("mouse_click")
-    if y ~= nil then
+    if event == "mouse_click" then
       if y ~= nil and (y >= 3 and y <= 7) then
         while true do
           term.setBackgroundColor(colordict.background)
