@@ -258,7 +258,7 @@ while true do
             term.setTextColor(colordict.text)
             print("Cancel")
             local event,button,x,y = os.pullEvent("mouse_click")
-            if y >= 12 and y <= 16 then
+            if y ~= nil and y >= 12 and y <= 16 then
               if x <= 13 then
                 confirmed = 1
               else
