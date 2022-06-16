@@ -23,6 +23,7 @@ if not fs.exists(".spcreds") then
     term.setTextColor(colors.white)
     term.setCursorPos(1,1)
     print("The SafePay credentials file does not exist on this device. It cannot be used to log into safepay.")
+    sleep(3)
   end
   return
 end
