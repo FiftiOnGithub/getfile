@@ -8,8 +8,6 @@ colordict = {
   button = colors.green
 }
 
-
-
 function printCentered(sText)
   local w, h = term.getSize()
   local x, y = term.getCursorPos()
@@ -19,10 +17,7 @@ function printCentered(sText)
 end
 
 if not fs.exists(".spcreds") then
-  while true do
-    print("The SafePay credentials file does not exist on this device. It cannot be used to log into safepay. Go to a safepay store for assistance, and bring this device with you.")
-    sleep(5)
-  end
+  print("The SafePay credentials file does not exist on this device. It cannot be used to log into safepay.")
   return
 end
 local encryptedinfohandler = fs.open(".spcreds","r")
@@ -84,23 +79,30 @@ while true do
     term.setCursorPos(term.getSize() / 2 - 2, 8)
     print(passcode .. "_")
     event,key = os.pullEvent("char")
-    passcode = passcode .. string.upper(key)
-    term.setCursorPos(term.getSize() / 2 - 2, 8)
-    print("       ")
-
-    if #passcode == 6 then
+    if key ~= nil then
+      passcode = passcode .. string.upper(key)
       term.setCursorPos(term.getSize() / 2 - 2, 8)
-      print(passcode)
-      local decrypted = aeslua.ext_decrypt(passcode,encryptedinfo)
-      if decrypted ~= nil then
-        local decrypteddata = textutils.unserialise(decrypted)
-        if type(decrypteddata) == "table" then
-          serverid = decrypteddata.server
-          publicid = decrypteddata.publicid
-          privatekey = decrypteddata.privatekey
-          term.setCursorPos(1,9)
-          printCentered("Authenticated")
-          sleep(1)
+      print("       ")
+
+      if #passcode == 6 then
+        term.setCursorPos(term.getSize() / 2 - 2, 8)
+        print(passcode)
+        local decrypted = aeslua.ext_decrypt(passcode,encryptedinfo)
+        if decrypted ~= nil then
+          local decrypteddata = textutils.unserialise(decrypted)
+          if type(decrypteddata) == "table" then
+            serverid = decrypteddata.server
+            publicid = decrypteddata.publicid
+            privatekey = decrypteddata.privatekey
+            term.setCursorPos(1,9)
+            printCentered("Authenticated")
+            sleep(1)
+          else
+            passcode = ""
+            term.setCursorPos(1,9)
+            printCentered("Incorrect password")
+            sleep(1)
+          end
         else
           passcode = ""
           term.setCursorPos(1,9)
@@ -108,16 +110,10 @@ while true do
           sleep(1)
         end
       else
-        passcode = ""
-        term.setCursorPos(1,9)
-        printCentered("Incorrect password")
-        sleep(1)
+        term.setCursorPos(term.getSize() / 2 - 2, 8)
+        print(passcode .. "_")
       end
-    else
-      term.setCursorPos(term.getSize() / 2 - 2, 8)
-      print(passcode .. "_")
     end
-
   end
 
   while true do
