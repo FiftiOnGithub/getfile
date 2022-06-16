@@ -200,7 +200,7 @@ while true do
         sleep(1)
       end
     end
-    if y ~= nil and y >= 9 and y <= 11 then
+    if y ~= nil and (y >= 9 and y <= 11) then
       local paycode = ""
       local info = ""
       local pcinfo = ""
