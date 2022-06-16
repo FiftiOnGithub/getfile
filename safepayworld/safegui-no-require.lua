@@ -1,3 +1,4 @@
+os.pullEvent = os.pullEventRaw
 
 colordict = {
   primary = colors.white,
@@ -18,7 +19,10 @@ function printCentered(sText)
 end
 
 if not fs.exists(".spcreds") then
-  print("The SafePay credentials file does not exist on this device. It cannot be used to log into safepay.")
+  while true do
+    print("The SafePay credentials file does not exist on this device. It cannot be used to log into safepay. Go to a safepay store for assistance, and bring this device with you.")
+    sleep(5)
+  end
   return
 end
 local encryptedinfohandler = fs.open(".spcreds","r")
