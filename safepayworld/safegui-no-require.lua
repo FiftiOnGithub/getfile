@@ -163,170 +163,172 @@ while true do
     term.write(message)
 
     local event,button,x,y = os.pullEvent("mouse_click")
-    if y ~= nil and (y >= 3 and y <= 7) then
-      while true do
-        term.setBackgroundColor(colordict.background)
-        term.clear()
-        term.setCursorPos(1,1)
-        paintutils.drawFilledBox(3,4,24,15,colordict.primary)
-        term.setCursorPos(1,1)
-        term.clearLine()
-        term.setCursorPos(1,1)
-        print("SafePay v5")
-
-        term.setCursorPos(3,5)
-        print("Receiver SafePay ID:")
-        term.setCursorPos(3,6)
-        local targetid = read()
-        term.setCursorPos(3,8)
-        print("Amount to send:")
-        term.setCursorPos(3,9)
-        local amount = read()
-        if tonumber(amount) == nil then
-          showError("Invalid number!")
-          break
-        else
-          info = safepay.transferMoney(targetid,tonumber(amount),otac,aeslua,privatekey,publicid,serverid)
-          if type(info) == "string" then
-            showError(info)
-            break
-          else
-            term.setCursorPos(3,11)
-            print("Success. ")
-            break
-          end
-        end
-
-        sleep(1)
-      end
-    end
-    if y ~= nil and (y >= 9 and y <= 11) then
-      local paycode = ""
-      local info = ""
-      local pcinfo = ""
-      local confirmed = 0
-      while true do
-        term.setBackgroundColor(colordict.background)
-        term.clear()
-        term.setCursorPos(1,1)
-        paintutils.drawFilledBox(3,4,24,16,colordict.primary)
-        term.setCursorPos(1,1)
-        term.clearLine()
-        term.setCursorPos(1,1)
-        print("SafePay v5")
-
-        term.setCursorPos(4,5)
-        print("PayCode:")
-        term.setCursorPos(4,6)
-        if paycode == "" then
-          paycode = read()
+    if y ~= nil then
+      if y ~= nil and (y >= 3 and y <= 7) then
+        while true do
           term.setBackgroundColor(colordict.background)
           term.clear()
-          paintutils.drawFilledBox(4,8,23,14,colordict.primary)
-          term.setCursorPos(1,11)
-          term.setTextColor(colordict.text)
-          printCentered("Loading...")
-          pcinfo = safepay.checkPaycode(paycode,otac,aeslua,privatekey,publicid,serverid)
-          if type(pcinfo) == "string" then
-            showError("(A) " .. pcinfo)
+          term.setCursorPos(1,1)
+          paintutils.drawFilledBox(3,4,24,15,colordict.primary)
+          term.setCursorPos(1,1)
+          term.clearLine()
+          term.setCursorPos(1,1)
+          print("SafePay v5")
+
+          term.setCursorPos(3,5)
+          print("Receiver SafePay ID:")
+          term.setCursorPos(3,6)
+          local targetid = read()
+          term.setCursorPos(3,8)
+          print("Amount to send:")
+          term.setCursorPos(3,9)
+          local amount = read()
+          if tonumber(amount) == nil then
+            showError("Invalid number!")
             break
           else
-            otac = pcinfo.otac
-          end
-        else
-          print(paycode)
-          
-          term.setCursorPos(4,8)
-          print("Paycode amount: ")
-          term.setCursorPos(4,9)
-          print(pcinfo.amount .. "$")
-          if pcinfo.amount < 0 then
-            term.setCursorPos(4,10)
-            print("Negative amounts")
-            term.setCursorPos(4,11)
-            print("give you money.")
-          end
-          if confirmed == 0 then
-            paintutils.drawFilledBox(4,13,12,15,colordict.button)
-          
-            term.setCursorPos(5,14)
-            term.setTextColor(colordict.text)
-            print("Confirm")
-        
-            paintutils.drawFilledBox(16,13,23,15,colordict.warning)
-            term.setCursorPos(17,14)
-            term.setTextColor(colordict.text)
-            print("Cancel")
-            local event,button,x,y = os.pullEvent("mouse_click")
-            if y ~= nil and y >= 12 and y <= 16 then
-              if x <= 13 then
-                confirmed = 1
-              else
-                confirmed = 3
-              end
-            end
-          elseif confirmed == 1 then
-            
-            term.setCursorPos(5,12)
-            printCentered("Loading...")
-            
-            local info = safepay.doPaycode(paycode,otac,aeslua,privatekey,publicid,serverid)
+            info = safepay.transferMoney(targetid,tonumber(amount),otac,aeslua,privatekey,publicid,serverid)
             if type(info) == "string" then
               showError(info)
               break
             else
-              confirmed = 2
+              term.setCursorPos(3,11)
+              print("Success. ")
+              break
             end
-            
-          elseif confirmed == 2 then
-            term.setCursorPos(5,14)
-            printCentered("- Success -")
-            sleep(1)
-            break;
+          end
+
+          sleep(1)
+        end
+      end
+      if y >= 9 and y <= 11 then
+        local paycode = ""
+        local info = ""
+        local pcinfo = ""
+        local confirmed = 0
+        while true do
+          term.setBackgroundColor(colordict.background)
+          term.clear()
+          term.setCursorPos(1,1)
+          paintutils.drawFilledBox(3,4,24,16,colordict.primary)
+          term.setCursorPos(1,1)
+          term.clearLine()
+          term.setCursorPos(1,1)
+          print("SafePay v5")
+
+          term.setCursorPos(4,5)
+          print("PayCode:")
+          term.setCursorPos(4,6)
+          if paycode == "" then
+            paycode = read()
+            term.setBackgroundColor(colordict.background)
+            term.clear()
+            paintutils.drawFilledBox(4,8,23,14,colordict.primary)
+            term.setCursorPos(1,11)
+            term.setTextColor(colordict.text)
+            printCentered("Loading...")
+            pcinfo = safepay.checkPaycode(paycode,otac,aeslua,privatekey,publicid,serverid)
+            if type(pcinfo) == "string" then
+              showError("(A) " .. pcinfo)
+              break
+            else
+              otac = pcinfo.otac
+            end
           else
-            term.setCursorPos(5,14)
-            printCentered("Cancelled")
-            sleep(1)
-            break
+            print(paycode)
+
+            term.setCursorPos(4,8)
+            print("Paycode amount: ")
+            term.setCursorPos(4,9)
+            print(pcinfo.amount .. "$")
+            if pcinfo.amount < 0 then
+              term.setCursorPos(4,10)
+              print("Negative amounts")
+              term.setCursorPos(4,11)
+              print("give you money.")
+            end
+            if confirmed == 0 then
+              paintutils.drawFilledBox(4,13,12,15,colordict.button)
+
+              term.setCursorPos(5,14)
+              term.setTextColor(colordict.text)
+              print("Confirm")
+
+              paintutils.drawFilledBox(16,13,23,15,colordict.warning)
+              term.setCursorPos(17,14)
+              term.setTextColor(colordict.text)
+              print("Cancel")
+              local event,button,x,y = os.pullEvent("mouse_click")
+              if y ~= nil and y >= 12 and y <= 16 then
+                if x <= 13 then
+                  confirmed = 1
+                else
+                  confirmed = 3
+                end
+              end
+            elseif confirmed == 1 then
+
+              term.setCursorPos(5,12)
+              printCentered("Loading...")
+
+              local info = safepay.doPaycode(paycode,otac,aeslua,privatekey,publicid,serverid)
+              if type(info) == "string" then
+                showError(info)
+                break
+              else
+                confirmed = 2
+              end
+
+            elseif confirmed == 2 then
+              term.setCursorPos(5,14)
+              printCentered("- Success -")
+              sleep(1)
+              break;
+            else
+              term.setCursorPos(5,14)
+              printCentered("Cancelled")
+              sleep(1)
+              break
+            end
           end
         end
       end
+      if y >= 13 and y <= 15 then
+        term.setBackgroundColor(colors.lightGray)
+        term.clear()
+        w,h = term.getSize()
+        paintutils.drawFilledBox(2,2,w-1,h-1,colors.white)
+
+        term.setCursorPos(1,3)
+        printCentered("- Security Guidance -")
+        term.setCursorPos(2,5)
+        print("1. Disk Drives")
+        term.setCursorPos(2,6)
+        print("Never insert SafePay")
+        term.setCursorPos(2,7)
+        print("device in a disk drive.")
+
+        term.setCursorPos(2,9)
+        print("2. Login code")
+        term.setCursorPos(2,10)
+        print("Never tell anyone your")
+        term.setCursorPos(2,11)
+        print("code or enter it into")
+        term.setCursorPos(2,12)
+        print("another device.")
+
+        term.setCursorPos(2,14)
+        print("3. Lost device")
+        term.setCursorPos(2,15)
+        print("If you lose your device,")
+        term.setCursorPos(2,16)
+        print("contact support ASAP.")
+
+        term.setCursorPos(2,h-2)
+        printCentered("Press any key")
+        os.pullEvent("key")
+
+      end
     end
-    if y >= 13 and y <= 15 then
-      term.setBackgroundColor(colors.lightGray)
-      term.clear()
-      w,h = term.getSize()
-      paintutils.drawFilledBox(2,2,w-1,h-1,colors.white)
-      
-      term.setCursorPos(1,3)
-      printCentered("- Security Guidance -")
-      term.setCursorPos(2,5)
-      print("1. Disk Drives")
-      term.setCursorPos(2,6)
-      print("Never insert SafePay")
-      term.setCursorPos(2,7)
-      print("device in a disk drive.")
-      
-      term.setCursorPos(2,9)
-      print("2. Login code")
-      term.setCursorPos(2,10)
-      print("Never tell anyone your")
-      term.setCursorPos(2,11)
-      print("code or enter it into")
-      term.setCursorPos(2,12)
-      print("another device.")
-      
-      term.setCursorPos(2,14)
-      print("3. Lost device")
-      term.setCursorPos(2,15)
-      print("If you lose your device,")
-      term.setCursorPos(2,16)
-      print("contact support ASAP.")
-      
-      term.setCursorPos(2,h-2)
-      printCentered("Press any key")
-      os.pullEvent("key")
-      
-    end
-  end
+   end
 end
