@@ -1,0 +1,20 @@
+function loadResource(a, b, c)
+    local d = http.get(b)
+    if c then
+      load(d.readAll())()
+      d.close()
+    else
+      if type(_G[a]) ~= "table" then
+        local e = ".temp_" .. tostring(math.random(100000,999999))
+        
+        local f = fs.open(e,"w")
+        f.write(d.readAll())
+        d.close()
+        f.close()
+        os.loadAPI(e)
+        _G[a] = _G[e]
+        _G[e] = nil
+        fs.delete(e)
+      end
+    end
+  end
