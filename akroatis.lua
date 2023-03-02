@@ -8,9 +8,9 @@ local relayid = 0;
 local relaylocations = {}
 local debug = false
 
-relaylocations[0] = {x = 0, y = 0, z = -0}
-relaylocations[1] = {x = 0, y = 0, z = -0}
-relaylocations[2] = {x = 0, y = 0, z = -0}
+relaylocations[0] = {x = -1841, y = 22, z = -1020}
+relaylocations[1] = {x = -1839, y = 23, z = -1021}
+relaylocations[2] = {x = -1840, y = 24, z = -1022}
 
 local channelLower = 65535 - 127
 local channelUpper = 65535
@@ -20,7 +20,7 @@ local wiredSide = nil
 
 local w,h = term.getSize()
 if w ~= 51 or h ~= 19 then
-  if relayid == 0 then
+  if relayid == 0 and not debug then
     error("Host Akroatis Snooper can only be run on a normal monitor, size 51x19.")
   end
 end
@@ -122,6 +122,23 @@ local function sameTable(a, b)
   return true
 end
 
+local function hostParallelListener()
+  while true do
+    eventtype, message_side, arg2, replychannel, message, message_distance = os.pullEvent("modem_message")
+    --print("(DEBUG) received message on side " .. message_side)
+    if relayid == 0 and message_side == wiredSide then
+      if debug then print("Received relayed location data") end
+      
+      if type(message) == "table" and type(message["relayID"]) ~= "nil" then
+        resolvePing(message["content"], message["relayID"], message["nDistance"], nil)
+      end
+      
+    elseif relayid == 0 and message_side == wirelessSide then 
+      local result = resolvePing(message, relayid, message_distance, replychannel)
+    end
+  end
+end
+
 if wirelessSide == nil or wiredSide == nil then error("Must have a wired and wireless connection") end
 
 function printCentered(sText)
@@ -158,23 +175,23 @@ wired.open(channelUpper)
 local CLEARING = {}
 local INTERCEPTS = {}
 function resolvePing(content, seenById, seenByDistance, senderRepChannel)
+  if debug then print("Received resolve request") end
   for k,v in pairs(CLEARING) do
     if os.clock() > v.firstSeen + 3 then
       if debug then print("removing entry due to timeout") end
       CLEARING[k] = nil
       break
     end
-    if not sameTable(v.content, content) then
-      print(textutils.serialise(v.content))
-      print(textutils.serialise(content))
-    end
     if sameTable(v.content, content) then
       
+      local nd = false
+      if CLEARING[k]["distances"][seenById] == nil then nd = true end
       CLEARING[k]["distances"][seenById] = seenByDistance
-      if debug then print("adding to distances array, seenbyID: " .. seenById) end
+      if debug then print("(OLD) adding to distances array, seenbyID: " .. seenById) end
       if senderRepChannel ~= nil then CLEARING[k]["replychannel"] = senderRepChannel end
-      if debug then print(tablelength(CLEARING[k]["distances"])) end
-      if tablelength(CLEARING[k]["distances"]) == 3 then
+      if debug then print("Seen by number: " .. tablelength(CLEARING[k]["distances"])) end
+      if tablelength(CLEARING[k]["distances"]) == 3 and nd then
+        if debug then print("ADDING NEW INTERCEPT") end
         local tLocs = {}
         for k,v in pairs(CLEARING[k]["distances"]) do
           table.insert(tLocs,{
@@ -188,7 +205,7 @@ function resolvePing(content, seenById, seenByDistance, senderRepChannel)
             rawContent = textutils.serialise(content),
             replyChannel = CLEARING[k]["replychannel"],
             location = location,
-            time = os.clock(),
+            time = textutils.formatTime(os.time()),
             viewed = false
         })
         local rednet, text, recipient, msgid, protocol = isRednet(content)
@@ -206,7 +223,7 @@ function resolvePing(content, seenById, seenByDistance, senderRepChannel)
     end
   end
   local clearingID = "X"
-  if debug then print("new clearing entry") end
+  if debug then print("Creating new clearing entry.") end
   while true do
     clearingID = math.random(10000)
     if CLEARING[clearingID] == nil then break end
@@ -218,10 +235,11 @@ function resolvePing(content, seenById, seenByDistance, senderRepChannel)
   }
   
   if senderRepChannel ~= nil then CLEARING[clearingID]["replychannel"] = senderRepChannel end
-  if debug then print("2: adding to distances, seenbyID: " .. seenById) end
+  if debug then print("(NEW CLEARING ENTRY) Adding to distances, seenbyID: " .. seenById) end
   CLEARING[clearingID]["distances"][seenById] = seenByDistance
 end
 
+local scrollOffset = 0
 
 if relayid == 0 then os.loadAPI("editlight") end
 local view = 0 -- cleared element id that we are looking at
@@ -238,14 +256,19 @@ function draw()
     printCentered(" AKROATIS SNOOPER ")
     printCentered("------------------")
     printCentered("")
-    printCentered("Session started day " .. os.day() .. ", running for " .. frame .. " seconds")
+    printCentered("Session started day " .. os.day())
     if relayid == 0 then printCentered("This is the HUB computer") end
     
+    term.setCursorPos(w-3,1)
+    term.setBackgroundColor(colors.green)
+    term.write("S")
+    term.setBackgroundColor(colors.orange)
+    term.write("L")
     term.setBackgroundColor(colors.blue)
-    term.setCursorPos(w-1,1)
     term.write("C")
     term.setBackgroundColor(colors.red)
     term.write("X")
+    term.setBackgroundColor(colors.black)
     local current = term.current()
     local win = window.create(current, 1,8,w,h-7)
     
@@ -257,9 +280,12 @@ function draw()
       term.setCursorPos(1,h/2)
       printCentered("No intercepted messages yet...")
     else
+      w,h = term.getSize()
       term.setCursorPos(1,math.min(#INTERCEPTS,h))
-      for i = #INTERCEPTS, 1, -1 do
-        if i - h > 0 then break end
+      scrollOffset = math.max(scrollOffset, 0)
+      scrollOffset = math.min(scrollOffset, math.max(#INTERCEPTS - h, 0))
+      for i = #INTERCEPTS - scrollOffset, 1, -1 do
+        --if i - h < 0 then break end
         local text = ""
         if INTERCEPTS[i].bRednet then
           term.setBackgroundColor(colors.pink)
@@ -271,20 +297,41 @@ function draw()
           text = "+ MODEM  | LEN: " .. #INTERCEPTS[i].rawContent
         end
         text = text .. " DST: " .. distance(INTERCEPTS[i].location)
-        agetext =  " " .. math.min(math.floor(os.clock() - INTERCEPTS[i].time),999) .. "s Ago"
+        agetext =  " " .. INTERCEPTS[i].time .. " "
         term.clearLine()
         if INTERCEPTS[i].viewed then
           if INTERCEPTS[i].bRednet then term.setTextColor(colors.lightGray) else term.setTextColor(colors.gray) end
         else
           term.setTextColor(colors.white)
         end
-        print(text)
+        term.write(text)
         x,y = term.getCursorPos()
-        term.setCursorPos(w - #agetext + 1, y-1)
+        term.setCursorPos(w - #agetext + 1, y)
         term.write(agetext)
-        term.setCursorPos(x,y-2)
+        term.setCursorPos(1,y-1)
       end
+      
+      if #INTERCEPTS > h then
+        
+        paintutils.drawLine(w,1,w,h,colors.gray)
+        local scrollbarsize = h
+        
+        local max_scroll_offset = #INTERCEPTS - h
+        
+        scrollOffset = math.max(scrollOffset, 0)
+        scrollOffset = math.min(scrollOffset, max_scroll_offset)
+        local scrollbuttonsize = math.floor((h / #INTERCEPTS) * scrollbarsize)
+        --local scrollbuttonsize = 3
+        local scrollbutton_y = math.min(math.max(math.floor(scrollbarsize - (scrollOffset / max_scroll_offset * scrollbarsize)) + 1, 1), h - scrollbuttonsize)
+        
+        paintutils.drawLine(w,scrollbutton_y, w, scrollbutton_y + scrollbuttonsize,colors.white)
+        
+      end
+      
     end
+    
+    
+    
     term.redirect(current)
     return
   end
@@ -299,7 +346,7 @@ function draw()
   print(" MESSAGE ANALYSIS")
   term.setCursorPos(3,3)
   print("------------------")
-  print("Intercepted " .. math.floor(os.clock() - INTERCEPTS[view].time) .. "s ago.")
+  print("Intercepted at " .. INTERCEPTS[view].time)
   print("")
   if INTERCEPTS[view].bRednet then
     print("- Rednet Data:")
@@ -319,7 +366,9 @@ function draw()
   print("")
   print("")
   print("- Location data:")
-  print("X: " .. INTERCEPTS[view].location.x .. " Y: " .. INTERCEPTS[view].location.y .. " Z: " .. INTERCEPTS[view].location.z)
+  print("X: " .. INTERCEPTS[view].location.x)
+  print("Y: " .. INTERCEPTS[view].location.y)
+  print("Z: " .. INTERCEPTS[view].location.z)
   print("Distance: " .. distance(INTERCEPTS[view].location))
   
   
@@ -353,7 +402,10 @@ function draw()
     
   end
   --]]
-  editlight.run(sContent, win)
+  local function elr()
+    editlight.run(sContent, win)
+  end
+  parallel.waitForAny(elr, hostParallelListener)
   view = 0
   term.redirect(current)
 end
@@ -365,7 +417,7 @@ while true do
     message_side, replychannel, message, message_distance = arg1, arg3, arg4, arg5
     --print("(DEBUG) received message on side " .. message_side)
     if relayid == 0 and message_side == wiredSide then
-      if debug then print("do hub stuff") end
+      if debug then print("Received relayed location data") end
       
       if type(message) == "table" and type(message["relayID"]) ~= "nil" then
         resolvePing(message["content"], message["relayID"], message["nDistance"], nil)
@@ -385,15 +437,19 @@ while true do
     end
   end
   if eventtype == "timer" and relayid == 0 then
-    draw()
+    if not debug then draw() end
     os.startTimer(1)
+  end
+  if eventtype == "mouse_scroll" and relayid == 0 then
+    scrollOffset = scrollOffset + (arg1 * -1)
+    draw()
   end
   if eventtype == "mouse_click" and relayid == 0 then
     cx, cy = arg2, arg3
     w,h = term.getSize()
     if view == 0 then
       if cy > 7 then
-        clickindex = math.min(#INTERCEPTS, h - 8) - (cy - 7)
+        clickindex = math.min(#INTERCEPTS, h - 7 ) - (cy - 7)
         if clickindex >= 0 then view = #INTERCEPTS - clickindex end
         
       elseif cy == 1 and cx == w then
@@ -406,8 +462,19 @@ while true do
         break
       elseif cy == 1 and cx == w - 1 then
         INTERCEPTS = {}
+      elseif cy == 1 and cx == w - 2 then
+        -- load
+        if fs.exists("AKS_save") then
+          local handle = fs.open("AKS_save","r")
+          INTERCEPTS = textutils.unserialise(handle.readAll())
+          handle.close()
+        end
+      elseif cy == 1 and cx == w - 3 then
+        -- save
+        local handle = fs.open("AKS_save","w")
+        handle.write(textutils.serialise(INTERCEPTS))
+        handle.close()
       end
     else view = 0 end
   end
 end
-
