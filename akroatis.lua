@@ -241,10 +241,11 @@ function draw()
     printCentered("Session started day " .. os.day() .. ", running for " .. frame .. " seconds")
     if relayid == 0 then printCentered("This is the HUB computer") end
     
+    term.setBackgroundColor(colors.blue)
+    term.setCursorPos(w-1,1)
+    term.write("C")
     term.setBackgroundColor(colors.red)
-    term.setCursorPos(w,1)
-    print("X")
-    term.setBackgroundColor(colors.black)
+    term.write("X")
     local current = term.current()
     local win = window.create(current, 1,8,w,h-7)
     
@@ -403,7 +404,10 @@ while true do
         wired.closeAll()
         wireless.closeAll()
         break
+      elseif cy == 1 and cx == w - 1 then
+        INTERCEPTS = {}
       end
     else view = 0 end
   end
 end
+
