@@ -305,7 +305,7 @@ function draw()
     print("- Rednet Data:")
     print("Claimed sender " .. INTERCEPTS[view].replyChannel)
     if INTERCEPTS[view].rednetData.recipient ~= 65535 then
-      print("Intended recipient: " .. INTERCEPTS[view].rednetData.recipient9)
+      print("Intended recipient: " .. INTERCEPTS[view].rednetData.recipient)
     else
       print("Broadcast message")
     end
