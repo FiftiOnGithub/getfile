@@ -346,6 +346,7 @@ function run(content, windowTerm)
       end,
       Return = function()
           bRunning = false
+          sStatus = "Just a moment..."
       end,
       Run = function()
           sTempPath = "/.temp"
