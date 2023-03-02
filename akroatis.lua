@@ -1,5 +1,5 @@
 -- 27th Feb 2023
--- Akroatis Snooper by Fifti
+-- Akroatis by Fifti
 -- do not distribute
 
 
@@ -8,9 +8,9 @@ local relayid = 0;
 local relaylocations = {}
 local debug = false
 
-relaylocations[0] = {x = -1841, y = 22, z = -1020}
-relaylocations[1] = {x = -1839, y = 23, z = -1021}
-relaylocations[2] = {x = -1840, y = 24, z = -1022}
+relaylocations[0] = {x = -2350, y = 56, z = -34}
+relaylocations[1] = {x = -2347, y = 59, z = -32}
+relaylocations[2] = {x = -2349, y = 57, z = -31}
 
 local channelLower = 65535 - 127
 local channelUpper = 65535
@@ -297,7 +297,7 @@ function draw()
           text = "+ MODEM  | LEN: " .. #INTERCEPTS[i].rawContent
         end
         text = text .. " DST: " .. distance(INTERCEPTS[i].location)
-        agetext =  " " .. INTERCEPTS[i].time .. " "
+        agetext =  " " .. INTERCEPTS[i].time .. " " 
         term.clearLine()
         if INTERCEPTS[i].viewed then
           if INTERCEPTS[i].bRednet then term.setTextColor(colors.lightGray) else term.setTextColor(colors.gray) end
@@ -320,8 +320,7 @@ function draw()
         
         scrollOffset = math.max(scrollOffset, 0)
         scrollOffset = math.min(scrollOffset, max_scroll_offset)
-        local scrollbuttonsize = math.floor((h / #INTERCEPTS) * scrollbarsize)
-        --local scrollbuttonsize = 3
+        local scrollbuttonsize = math.floor(h / #INTERCEPTS * scrollbarsize - 1)
         local scrollbutton_y = math.min(math.max(math.floor(scrollbarsize - (scrollOffset / max_scroll_offset * scrollbarsize)) + 1, 1), h - scrollbuttonsize)
         
         paintutils.drawLine(w,scrollbutton_y, w, scrollbutton_y + scrollbuttonsize,colors.white)
@@ -370,7 +369,6 @@ function draw()
   print("Y: " .. INTERCEPTS[view].location.y)
   print("Z: " .. INTERCEPTS[view].location.z)
   print("Distance: " .. distance(INTERCEPTS[view].location))
-  
   
   local current = term.current()
   local win = window.create(current, w/2,1,w/2+2,h)
@@ -437,8 +435,9 @@ while true do
     end
   end
   if eventtype == "timer" and relayid == 0 then
+    local preview = view
     if not debug then draw() end
-    os.startTimer(1)
+    if preview ~= 0 then os.startTimer(0) else os.startTimer(1) end
   end
   if eventtype == "mouse_scroll" and relayid == 0 then
     scrollOffset = scrollOffset + (arg1 * -1)
@@ -449,9 +448,12 @@ while true do
     w,h = term.getSize()
     if view == 0 then
       if cy > 7 then
-        clickindex = math.min(#INTERCEPTS, h - 7 ) - (cy - 7)
-        if clickindex >= 0 then view = #INTERCEPTS - clickindex end
-        
+        clickindex = cy - (h - (#INTERCEPTS - scrollOffset))
+        if #INTERCEPTS < (h - 7) then clickindex = cy - 7 end
+        if clickindex <= #INTERCEPTS and clickindex > 0 then 
+          view = clickindex 
+          draw()
+        end
       elseif cy == 1 and cx == w then
         term.setBackgroundColor(colors.black)
         term.setTextColor(colors.white)
@@ -475,6 +477,7 @@ while true do
         handle.write(textutils.serialise(INTERCEPTS))
         handle.close()
       end
+      os.startTimer(0)
     else view = 0 end
   end
 end
