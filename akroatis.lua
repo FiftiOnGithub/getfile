@@ -167,14 +167,58 @@ wireless = peripheral.wrap(wirelessSide)
 wired = peripheral.wrap(wiredSide)
 wireless.closeAll()
 wired.closeAll()
+
+wired.open(65535)
+
+if relayid == 0 then
+  print("Announcing channel to swarm. Operating on channels:")
+  print(channelLower .. " to " .. channelUpper)
+  snoopers = {}
+  os.startTimer(0.2)
+  while tablelength(snoopers) < 2 do
+    event, _, _, _, message = os.pullEvent()
+    if event == "timer" then
+      wired.transmit(65535, 65535, {
+        id = 0,
+        channelLower = channelLower,
+        channelUpper = channelUpper
+      })
+      print("Repeating")
+      os.startTimer(0.5)
+    end
+    if type(message) == "table" and message["id"] ~= 0 then 
+      if snoopers[tostring(message["id"])] == nil then
+        snoopers[tostring(message["id"])] = true
+        print("Got response from relay " .. message["id"])
+      end
+    end
+  end
+  print("Connected to two relays. Starting.")
+  sleep(1)
+else
+  channelUpper = nil
+  print("Awaiting channels")
+  while channelUpper == nil do
+    _, _, _, _, message = os.pullEvent("modem_message")
+    if type(message) == "table" and message["id"] ~= nil and message["id"] == 0 then 
+      channelLower = message["channelLower"]
+      channelUpper = message["channelUpper"]
+      print("Got channels from host. Operating on " .. channelLower .. " to " .. channelUpper)
+      wired.transmit(65535,65535, {
+        id = relayid
+      })
+      sleep(4)
+    end
+  end
+end
+
 for i = channelLower, channelUpper do
   wireless.open(i)
 end
-wired.open(channelUpper)
 
 local CLEARING = {}
 local INTERCEPTS = {}
-function resolvePing(content, seenById, seenByDistance, senderRepChannel)
+function resolvePing(content, seenById, seenByDistance, senderRepChannel, sendChannel)
   if debug then print("Received resolve request") end
   for k,v in pairs(CLEARING) do
     if os.clock() > v.firstSeen + 3 then
@@ -186,10 +230,16 @@ function resolvePing(content, seenById, seenByDistance, senderRepChannel)
       
       local nd = false
       if CLEARING[k]["distances"][seenById] == nil then nd = true end
-      CLEARING[k]["distances"][seenById] = seenByDistance
+      
       if debug then print("(OLD) adding to distances array, seenbyID: " .. seenById) end
-      if senderRepChannel ~= nil then CLEARING[k]["replychannel"] = senderRepChannel end
       if debug then print("Seen by number: " .. tablelength(CLEARING[k]["distances"])) end
+      
+      
+      CLEARING[k]["distances"][seenById] = seenByDistance
+      if senderRepChannel ~= nil then CLEARING[k]["replychannel"] = senderRepChannel end
+      if sendChannel ~= nil then CLEARING[k]["sendchannel"] = sendchannel end
+      
+      
       if tablelength(CLEARING[k]["distances"]) == 3 and nd then
         if debug then print("ADDING NEW INTERCEPT") end
         local tLocs = {}
@@ -203,6 +253,7 @@ function resolvePing(content, seenById, seenByDistance, senderRepChannel)
         table.insert(INTERCEPTS, {
             bRednet = false,
             rawContent = textutils.serialise(content),
+            sendChannel = CLEARING[k]["sendchannel"],
             replyChannel = CLEARING[k]["replychannel"],
             location = location,
             time = textutils.formatTime(os.time()),
@@ -235,6 +286,8 @@ function resolvePing(content, seenById, seenByDistance, senderRepChannel)
   }
   
   if senderRepChannel ~= nil then CLEARING[clearingID]["replychannel"] = senderRepChannel end
+  if sendChannel ~= nil then CLEARING[clearingID]["sendchannel"] = sendChannel end
+  
   if debug then print("(NEW CLEARING ENTRY) Adding to distances, seenbyID: " .. seenById) end
   CLEARING[clearingID]["distances"][seenById] = seenByDistance
 end
@@ -256,7 +309,7 @@ function draw()
     printCentered(" AKROATIS SNOOPER ")
     printCentered("------------------")
     printCentered("")
-    printCentered("Session started day " .. os.day())
+    printCentered("Listening on channels " .. channelLower .. " to " .. channelUpper)
     if relayid == 0 then printCentered("This is the HUB computer") end
     
     term.setCursorPos(w-3,1)
@@ -360,7 +413,8 @@ function draw()
     end
   else
     print("Raw modem transmission")
-    print("Req. reply channel: " .. INTERCEPTS[view].replyChannel)
+    print("Sent on ch.: " .. INTERCEPTS[view].sendChannel)
+    print("Req. reply ch.: " .. INTERCEPTS[view].replyChannel)
   end
   print("")
   print("")
@@ -384,22 +438,6 @@ function draw()
   else
     sContent = (INTERCEPTS[view].rawContent)
   end
-  --[[
-  tContent = split(sContent, "\n")
-  local cpos = 1
-  w,h = term.getSize()
-  local linelen = w / 2 - 1
-  -- loop through each line
-  for k,v in pairs(tContent) do
-    
-    for i=cpos, #v+1 do
-      if v:sub(i,i) == " " or v:sub(i,i) == "" or (i-cpos + 1) > linelen then
-        
-      end
-    end
-    
-  end
-  --]]
   local function elr()
     editlight.run(sContent, win)
   end
@@ -412,13 +450,13 @@ os.startTimer(0.05)
 while true do
   eventtype, arg1, arg2, arg3, arg4, arg5 = os.pullEvent()
   if eventtype == "modem_message" then
-    message_side, replychannel, message, message_distance = arg1, arg3, arg4, arg5
+    message_side, sendchannel, replychannel, message, message_distance = arg1, arg2, arg3, arg4, arg5
     --print("(DEBUG) received message on side " .. message_side)
     if relayid == 0 and message_side == wiredSide then
       if debug then print("Received relayed location data") end
       
       if type(message) == "table" and type(message["relayID"]) ~= "nil" then
-        resolvePing(message["content"], message["relayID"], message["nDistance"], nil)
+        resolvePing(message["content"], message["relayID"], message["nDistance"], nil, nil)
       end
       
     end
@@ -431,7 +469,11 @@ while true do
       wired.transmit(65535, 65535, message)
       print("-- Relayed message from a distance of " .. message_distance)
     elseif relayid == 0 and message_side == wirelessSide then 
-      local result = resolvePing(message, relayid, message_distance, replychannel)
+      local result = resolvePing(message, relayid, message_distance, replychannel, sendchannel)
+    elseif relayid ~= 0 and message_side == wiredSide and type(message) == "table" and message["channelLower"] ~= nil then
+      print("Received reboot instruction")
+      sleep(0.5)
+      os.reboot()
     end
   end
   if eventtype == "timer" and relayid == 0 then
@@ -447,7 +489,7 @@ while true do
     cx, cy = arg2, arg3
     w,h = term.getSize()
     if view == 0 then
-      if cy > 7 then
+      if cy > 7 and cx < w - 1 then
         clickindex = cy - (h - (#INTERCEPTS - scrollOffset))
         if #INTERCEPTS < (h - 7) then clickindex = cy - 7 end
         if clickindex <= #INTERCEPTS and clickindex > 0 then 
