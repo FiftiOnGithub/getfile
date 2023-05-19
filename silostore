@@ -1,0 +1,374 @@
+function findPeripheral(kind)
+  out = {}
+  for _,i in pairs(peripheral.getNames()) do
+    if string.match(i, kind) then table.insert(out, i) end
+  end
+  return out
+end
+
+function arrayLength(T)
+  local n = 0
+  for a,b in pairs(T) do
+    n = n + 1
+  end
+  return n
+end
+
+function printCentered(sText)
+  local w, h = term.getSize()
+  local x, y = term.getCursorPos()
+  x = math.max(math.floor((w / 2) - (#sText / 2) + 1), 0)
+  term.setCursorPos(x, y)
+  print(sText)
+end
+
+function infoBox(color, title, message, nohold)
+  term.setBackgroundColor(colors.white)
+  term.clear()
+  w,h = term.getSize()
+  paintutils.drawFilledBox(w/4,h/4,w - w/4,h - h/5,color)
+  term.setCursorPos(1,h/3-1)  
+  term.setTextColor(colors.white)
+  printCentered(title)
+  local y = h/3 + 1
+  local x = 0
+  local line = ""
+  for i=1,#message,1 do
+    line = line .. message:sub(i,i)
+    x = x + 1
+    
+    if (x >= 22) or (message:sub(i+1,i+1) ~= " " and message:sub(i,i) == " " and x == 21) then
+      
+      if message:sub(i+1,i+1) ~= " " and message:sub(i+1,i+1) ~= "" and message:sub(i,i) ~= " " then
+        line = line .. "-"
+      end
+      
+      term.setCursorPos(1,y)
+      term.setTextColor(colors.white)
+      printCentered(line)
+      y = y + 1
+      x = 0
+      line = ""
+    end
+  end
+  term.setCursorPos(1,y)
+  term.setTextColor(colors.white)
+  printCentered(line)
+
+  
+  if not nohold then
+    term.setCursorPos(1,h - h/5-1)
+    printCentered("[ OK ]")
+    x,y = term.getCursorPos()
+    while true do
+      _, _, cx, cy = os.pullEvent("mouse_click")
+      
+      if cx >= w / 2 - 3 and cy == y - 1 and cx <= w / 2 + 3 then
+        break
+      end
+    end
+  end
+  return true
+end
+
+function handleDeposit()
+  infoBox(colors.green, "Deposit", "Place the items in the dropper, then click 'OK' below.")
+  infoBox(colors.green, "Deposit", "Place the items in the dropper, then click 'OK' below.",true)
+  items = dropper.list()
+  lenitems = arrayLength(items)
+  avspac = 0
+  if lenitems == 0 then
+    infoBox(colors.red, "Deposit", "You never put anything in the dropper.")
+    return
+  end
+  
+  for _, i in pairs(chests) do
+    chestitems = peripheral.call(i, "list")
+    if arrayLength(chestitems) < peripheral.call(i, "size") then
+      avspac = avspac + peripheral.call(i, "size") - arrayLength(chestitems)
+    end
+    if avspac >= lenitems then break end
+  end
+  if avspac < lenitems then 
+    infoBox(colors.red,"Deposit", "Not enough space!")
+    return
+  end
+  currentSlot = 1
+  for _, i in pairs(chests) do
+    chestitems = peripheral.call(i, "list")
+    lenchestitems = arrayLength(chestitems)
+    while lenchestitems < peripheral.call(i, "size") do
+      dropper.pushItems(i, currentSlot)
+      lenchestitems = lenchestitems + 1
+      while currentSlot < 9 and dropper.getItemDetail(currentSlot) == nil do 
+        currentSlot = currentSlot + 1
+      end
+      if currentSlot >= 9 and dropper.getItemDetail(currentSlot) == nil then break end
+    end
+    if currentSlot >= 9 and dropper.getItemDetail(currentSlot) == nil then break end
+  end
+  infoBox(colors.green, "Deposit", "Deposit complete.")
+  return
+  
+end
+
+local function drawSearchGUI(bgc, itemcache, searchterm)
+  
+  
+  if searchterm == nil then searchterm = "" end
+  allitems = itemcache
+  if itemcache == nil then
+    allitems = {}
+    for _, i in pairs(chests) do
+      items = peripheral.call(i, "list")
+      for iter,j in pairs(items) do
+        name = peripheral.call(i, "getItemDetail", iter)["displayName"]
+        if allitems[name] == nil then 
+          allitems[name] = j["count"]
+        else
+          allitems[name] = allitems[name] + j["count"]
+        end
+      end
+    end
+  end
+  ait = {}
+  
+  for i,j in pairs(allitems) do
+    table.insert(ait, {
+      name = i,
+      count = j
+    })
+  end
+  table.sort(ait, function (k1, k2) return k1.count > k2.count end)
+  term.setBackgroundColor(bgc)
+  term.setTextColor(colors.white)
+
+  term.clear()
+  term.setBackgroundColor(colors.white)
+  term.setCursorPos(1,1)
+  term.clearLine(1)
+  term.setTextColor(colors.black)
+  term.setCursorPos(1,1)
+  write("<- Back")
+  printCentered("- SiloStore 1 -")
+  term.setBackgroundColor(bgc)
+  term.setTextColor(colors.white)
+  term.setCursorPos(1,5)
+  print("QTY    NAME")
+  w,h = term.getSize()
+  y = 6
+  options = {}
+  for i,j in pairs(ait) do
+    if y >= h then break end
+    if searchterm == nil or string.match(string.lower(j.name), string.lower(searchterm)) then
+      print(j.count .. string.sub("          ", 10 - (7 - #tostring(j.count)) + 1) .. j.name)
+      options[y] = j
+      y = y + 1
+    end
+  end
+  
+  term.setCursorPos(1,3)
+  write("Search for: " .. searchterm)
+  term.setCursorBlink(true)
+  
+  if arrayLength(options) == 0 then
+    term.setCursorPos(1,7)
+    printCentered("- No results -")
+    term.setCursorBlink(false)
+  end
+  
+  while true do
+    event, key, a1, a2 = os.pullEvent()
+    if event == "char" then
+      searchterm = searchterm .. key
+      break
+    elseif event == "key" then
+      if key == keys.backspace then
+        if #searchterm > 0 then
+          searchterm = string.sub(searchterm, 1, #searchterm - 1)
+          break
+        end
+      end
+    elseif event == "mouse_click" then
+      x,y = a1,a2
+      if y == 1 and x < 9 then
+        return
+      end
+      if y >= 6 and y < h then
+        itemname = options[y].name
+        count = options[y].count
+        term.setBackgroundColor(bgc)
+        term.clear()
+        term.setBackgroundColor(colors.white)
+        term.setCursorPos(1,1)
+        term.clearLine(1)
+        term.setTextColor(colors.black)
+        term.setCursorPos(1,1)
+        write("<- Back")
+        printCentered("- SiloStore 1 -")
+        term.setBackgroundColor(bgc)
+        term.setTextColor(colors.white)
+        term.setCursorPos(1,3)
+        print("Withdrawing " .. itemname)
+        print("There are " .. count .. " in storage")
+        amount = ""
+        done = 0
+        while done == 0 do
+          term.clearLine()
+          term.setCursorPos(1,6)
+          write("Enter amount to withdraw: " .. amount)
+          term.setCursorBlink(true)
+          while true do
+            event, key, a1, a2 = os.pullEvent()
+            if event == "char" then
+              if tonumber(key) ~= nil then
+                amount = amount .. key
+                break
+              end
+            elseif event == "key" then
+              if key == keys.backspace then
+                if #amount > 0 then
+                  amount = string.sub(amount, 1, #amount - 1)
+                  break
+                end
+              end
+              
+              if key == keys.enter then
+                if amount ~= "" then
+                  done = 1
+                  break
+                end
+              end
+            elseif event == "mouse_click" then
+              x,y = a1,a2
+              if y == 1 and x < 9 then
+                done = 2
+                break
+              end
+            end
+          end
+        end
+        if done == 1 then
+          amount = tonumber(amount)
+          term.setCursorBlink(false)
+          term.setCursorPos(1,8)
+          write("Loading..")
+          if amount <= 64 * 9 then
+            remaining = amount
+            
+            for _, i in pairs(chests) do
+              items = peripheral.call(i, "list")
+              for iter,j in pairs(items) do
+                if remaining > 0 then
+                  detail = peripheral.call(i, "getItemDetail", iter)
+                  if detail["displayName"] == itemname then
+                    peripheral.call(i, "pushItems", output, iter, remaining)
+                    remaining = remaining - detail["count"]
+                  end
+                end
+              end
+            end
+            term.setCursorPos(1,8)
+            term.clearLine()
+            term.setCursorPos(1,8)
+            if remaining > 0 then
+              print("Withdrew " .. (amount - remaining) .. " items. Could not withdraw any more.")
+            else
+              print("Withdrew " .. amount .. " items.")
+            end
+            sleep(3)
+            return
+            
+          else
+            infoBox(colors.red, "Error", "Maximum withdrawal is " .. 64 * 9 .. " items.")
+            break
+          end
+        elseif done == 2 then
+          break
+        end
+      end
+    end
+  end
+  drawSearchGUI(bgc, allitems, searchterm)
+  
+end
+
+while true do
+  output = findPeripheral("dropper")[1]
+  dropper = peripheral.wrap(output)
+
+  chests = findPeripheral("chest")
+
+  if not modem or not output or not turtle or not chests[1] then
+    error("Not all required elements are in place. Check turtle, modem, dropper and chests")
+  end
+  term.setBackgroundColor(colors.white)
+  term.setTextColor(colors.white)
+
+  term.clear()
+  w,h = term.getSize()
+  paintutils.drawFilledBox(w / 8      ,   h/5 + 1,  w/2 - 3,  h/5 + 5,  colors.green)
+  term.setCursorPos(w/8 + 2, h/5 + 3)
+  print("Deposit Items")
+
+  paintutils.drawFilledBox(w/2 + 3,   h/5 + 1,  w - w/8 + 1,  h/5 + 5,  colors.blue)
+  term.setCursorPos(w / 2 + w/8 - 1, h/5 + 3)
+  print("Withdraw Items")
+  
+  totitems = 0
+  usedstacks = 0
+  totalstacks = 0
+  for _, i in pairs(chests) do
+    items = peripheral.call(i, "list")
+    totalstacks = totalstacks + peripheral.call(i, "size")
+    for iter,j in pairs(items) do
+      totitems = totitems + j["count"]
+      usedstacks = usedstacks + 1
+    end
+  end
+  
+  percent = math.floor(usedstacks / totalstacks * 100)
+  term.setTextColor(colors.lightGray)
+  term.setBackgroundColor(colors.white)
+  stra = totitems .. " items  "
+  strb = "  " .. percent .. "% full"
+  term.setCursorPos(w/2 - (#stra),h-2)
+  print(stra .. "\7" .. strb)
+  term.setCursorBlink(false)
+  os.startTimer(1)
+  while true do
+    event, arg1, arg2, arg3 = os.pullEvent()
+    
+    if event == "timer" then
+      os.startTimer(1)
+      if arrayLength(dropper.list()) > 0 then
+        term.setTextColor(colors.red)
+        term.setCursorPos(1,h-1)
+        printCentered("There are items in the output dropper.")
+      else
+        term.setCursorPos(1,h-1)
+        term.clearLine()
+      end
+      
+    end
+    
+    if event == "mouse_click" then
+      x,y = arg2, arg3
+      
+      if x >= w / 8 and x<= w / 2 - w / 8 + 1 then
+        if y >= h/5 + 1 and y <= h/5 + 5 then
+          handleDeposit()
+          break
+        end
+      end
+      
+      if x >= w / 2 + w / 8 - 1 and x<= w - w / 8 + 1 then
+        if y >= h/5 + 1 and y <= h/5 + 5 then
+          infoBox(colors.blue, "Withdrawal", "Loading, please wait", true)
+          drawSearchGUI(colors.blue)
+          break
+        end
+      end
+    end
+  end
+end
