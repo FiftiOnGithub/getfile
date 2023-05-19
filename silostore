@@ -299,7 +299,7 @@ while true do
 
   chests = findPeripheral("chest")
 
-  if not modem or not output or not turtle or not chests[1] then
+  if not output or not chests[1] then
     error("Not all required elements are in place. Check turtle, modem, dropper and chests")
   end
   term.setBackgroundColor(colors.white)
