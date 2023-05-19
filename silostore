@@ -300,7 +300,9 @@ while true do
   chests = findPeripheral("chest")
 
   if not output or not chests[1] then
-    error("Not all required elements are in place. Check turtle, modem, dropper and chests")
+    print(output)
+    print(chests[1])  
+    error("Check that a dropper and chest are connected.")
   end
   term.setBackgroundColor(colors.white)
   term.setTextColor(colors.white)
