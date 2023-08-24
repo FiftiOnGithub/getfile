@@ -8,13 +8,12 @@ local relayid = 0;
 local relaylocations = {}
 local debug = false
 
-relaylocations[0] = {x = -2350, y = 56, z = -34}
-relaylocations[1] = {x = -2347, y = 59, z = -32}
-relaylocations[2] = {x = -2349, y = 57, z = -31}
+relaylocations[0] = {x = 0, y = -8, z = -6}
+relaylocations[1] = {x = 1, y = -7, z = -7}
+relaylocations[2] = {x = -1, y = -6, z = -8}
 
-local channelLower = 65535 - 127
-local channelUpper = 65535
-
+local channelUpper = 38301
+local channelLower = channelUpper - 127
 local wirelessSide = nil
 local wiredSide = nil
 
