@@ -1,3 +1,13 @@
+---- SILOSTORE BY FIFTI
+
+
+
+
+
+
+---- 1. utility functions
+-------------------------
+
 function findPeripheral(kind)
   out = {}
   for _,i in pairs(peripheral.getNames()) do
@@ -14,12 +24,45 @@ function arrayLength(T)
   return n
 end
 
+function sleepTwo()
+  sleep(2)
+  return
+end
+
 function printCentered(sText)
   local w, h = term.getSize()
   local x, y = term.getCursorPos()
   x = math.max(math.floor((w / 2) - (#sText / 2) + 1), 0)
   term.setCursorPos(x, y)
   print(sText)
+end
+
+chestItems = {}
+function internalUpdateItems(i)
+  local toReturn = {}
+  local chest = peripheral.wrap(i)
+  local items = chest.list()
+  --local items = peripheral.call(i, "list")
+  for iter,j in pairs(items) do
+    toReturn[iter] = j
+    toReturn[iter]["displayName"] = chest.getItemDetail(iter)["displayName"]
+   -- toReturn[iter]["displayName"] = peripheral.call(i,"getItemDetail",iter)["displayName"]
+  end
+  return toReturn
+end
+
+function updateItems()
+  t = os.clock()
+  allChestItems = {}
+  if chests == nil then
+    chests = findPeripheral("chest")
+  end
+  loopFunctions = {}
+  for _, i in pairs(chests) do
+    table.insert(loopFunctions, function() allChestItems[i] = internalUpdateItems(i) end)
+  end
+  parallel.waitForAll(table.unpack(loopFunctions))
+  chestItems = allChestItems
 end
 
 function infoBox(color, title, message, nohold)
@@ -54,7 +97,6 @@ function infoBox(color, title, message, nohold)
   term.setCursorPos(1,y)
   term.setTextColor(colors.white)
   printCentered(line)
-
   
   if not nohold then
     term.setCursorPos(1,h - h/5-1)
@@ -71,58 +113,88 @@ function infoBox(color, title, message, nohold)
   return true
 end
 
+
+
+
+
+
+
+
+---- 2. deposit handling
+------------------------
+
 function handleDeposit()
   infoBox(colors.green, "Deposit", "Place the items in the dropper, then click 'OK' below.")
   infoBox(colors.green, "Deposit", "Place the items in the dropper, then click 'OK' below.",true)
   items = dropper.list()
   lenitems = arrayLength(items)
   avspac = 0
+
   if lenitems == 0 then
     infoBox(colors.red, "Deposit", "You never put anything in the dropper.")
     return
   end
-  
-  for _, i in pairs(chests) do
-    chestitems = peripheral.call(i, "list")
-    if arrayLength(chestitems) < peripheral.call(i, "size") then
-      avspac = avspac + peripheral.call(i, "size") - arrayLength(chestitems)
+
+  for _, i in pairs(chestItems) do
+    if arrayLength(i) < 54 then
+      avspac = avspac + 54 - arrayLength(i)
     end
-    if avspac >= lenitems then break end
   end
   if avspac < lenitems then 
     infoBox(colors.red,"Deposit", "Not enough space!")
     return
   end
   currentSlot = 1
-  for _, i in pairs(chests) do
-    chestitems = peripheral.call(i, "list")
-    lenchestitems = arrayLength(chestitems)
-    while lenchestitems < peripheral.call(i, "size") do
+
+
+  for i,j in pairs(chestItems) do
+    list = j
+    lenchestitems = arrayLength(j)
+    while lenchestitems < 54 do
       dropper.pushItems(i, currentSlot)
       lenchestitems = lenchestitems + 1
-      while currentSlot < 9 and dropper.getItemDetail(currentSlot) == nil do 
+      while currentSlot < 9 and dropper.getItemDetail(currentSlot) == nil do
         currentSlot = currentSlot + 1
       end
       if currentSlot >= 9 and dropper.getItemDetail(currentSlot) == nil then break end
     end
     if currentSlot >= 9 and dropper.getItemDetail(currentSlot) == nil then break end
   end
-  infoBox(colors.green, "Deposit", "Deposit complete.")
+  parallel.waitForAll(function () infoBox(colors.green, "Deposit", "Deposit complete.") end, updateItems)
   return
-  
 end
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----3. withdrawal handling
+--------------------------
+
 local function drawSearchGUI(bgc, itemcache, searchterm)
-  
   
   if searchterm == nil then searchterm = "" end
   allitems = itemcache
   if itemcache == nil then
     allitems = {}
-    for _, i in pairs(chests) do
-      items = peripheral.call(i, "list")
+
+
+    for i,items in pairs(chestItems) do
       for iter,j in pairs(items) do
-        name = peripheral.call(i, "getItemDetail", iter)["displayName"]
+        name = j["displayName"]
         if allitems[name] == nil then 
           allitems[name] = j["count"]
         else
@@ -134,10 +206,12 @@ local function drawSearchGUI(bgc, itemcache, searchterm)
   ait = {}
   
   for i,j in pairs(allitems) do
-    table.insert(ait, {
-      name = i,
-      count = j
-    })
+    if searchterm == nil or string.match(string.lower(i), string.lower(searchterm)) then
+      table.insert(ait, {
+        name = i,
+        count = j
+      })
+    end
   end
   table.sort(ait, function (k1, k2) return k1.count > k2.count end)
   term.setBackgroundColor(bgc)
@@ -150,12 +224,13 @@ local function drawSearchGUI(bgc, itemcache, searchterm)
   term.setTextColor(colors.black)
   term.setCursorPos(1,1)
   write("<- Back")
-  printCentered("- SiloStore 1 -")
+  printCentered("- SiloStore 3 -")
   term.setBackgroundColor(bgc)
   term.setTextColor(colors.white)
   term.setCursorPos(1,5)
   print("QTY    NAME")
   w,h = term.getSize()
+  
   y = 6
   options = {}
   for i,j in pairs(ait) do
@@ -167,6 +242,11 @@ local function drawSearchGUI(bgc, itemcache, searchterm)
     end
   end
   
+  if arrayLength(ait) > h - 6 then
+    term.setCursorPos(1,h)
+    write("... and " .. (arrayLength(ait) - (h - 6)) .. " more")
+  end
+  
   term.setCursorPos(1,3)
   write("Search for: " .. searchterm)
   term.setCursorBlink(true)
@@ -176,7 +256,6 @@ local function drawSearchGUI(bgc, itemcache, searchterm)
     printCentered("- No results -")
     term.setCursorBlink(false)
   end
-  
   while true do
     event, key, a1, a2 = os.pullEvent()
     if event == "char" then
@@ -205,7 +284,7 @@ local function drawSearchGUI(bgc, itemcache, searchterm)
         term.setTextColor(colors.black)
         term.setCursorPos(1,1)
         write("<- Back")
-        printCentered("- SiloStore 1 -")
+        printCentered("- SiloStore 3 -")
         term.setBackgroundColor(bgc)
         term.setTextColor(colors.white)
         term.setCursorPos(1,3)
@@ -252,37 +331,35 @@ local function drawSearchGUI(bgc, itemcache, searchterm)
           amount = tonumber(amount)
           term.setCursorBlink(false)
           term.setCursorPos(1,8)
-          write("Loading..")
+          
           if amount <= 64 * 9 then
-            remaining = amount
-            
-            for _, i in pairs(chests) do
-              items = peripheral.call(i, "list")
-              for iter,j in pairs(items) do
-                if remaining > 0 then
-                  detail = peripheral.call(i, "getItemDetail", iter)
-                  if detail["displayName"] == itemname then
-                    peripheral.call(i, "pushItems", output, iter, remaining)
-                    remaining = remaining - detail["count"]
-                  end
+            write("Loading..")
+          else
+            write("Loading, max withdrawal is " .. 64 * 9)
+            amount = 64*9
+          end
+          remaining = amount
+          
+          for i,items in pairs(chestItems) do
+            for iter,j in pairs(items) do
+              if remaining > 0 then
+                if j["displayName"] == itemname then
+                  peripheral.call(i, "pushItems", output, iter, remaining)
+                  remaining = remaining - j["count"]
                 end
               end
             end
-            term.setCursorPos(1,8)
-            term.clearLine()
-            term.setCursorPos(1,8)
-            if remaining > 0 then
-              print("Withdrew " .. (amount - remaining) .. " items. Could not withdraw any more.")
-            else
-              print("Withdrew " .. amount .. " items.")
-            end
-            sleep(3)
-            return
-            
-          else
-            infoBox(colors.red, "Error", "Maximum withdrawal is " .. 64 * 9 .. " items.")
-            break
           end
+          term.setCursorPos(1,8)
+          term.clearLine()
+          term.setCursorPos(1,8)
+          if remaining > 0 then
+            print("Withdrew " .. (amount - remaining) .. " items. Could not withdraw any more.")
+          else
+            print("Withdrew " .. amount .. " items.")
+          end
+          parallel.waitForAny(sleepTwo, updateItems)
+          return
         elseif done == 2 then
           break
         end
@@ -290,9 +367,34 @@ local function drawSearchGUI(bgc, itemcache, searchterm)
     end
   end
   drawSearchGUI(bgc, allitems, searchterm)
-  
 end
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----4. main loop
+----------------
+
+term.setBackgroundColor(colors.black)
+term.clear()
+term.setCursorPos(1,10)
+printCentered("Loading")
+updateItems()
 while true do
   output = findPeripheral("dropper")[1]
   dropper = peripheral.wrap(output)
@@ -320,9 +422,8 @@ while true do
   totitems = 0
   usedstacks = 0
   totalstacks = 0
-  for _, i in pairs(chests) do
-    items = peripheral.call(i, "list")
-    totalstacks = totalstacks + peripheral.call(i, "size")
+  for i, items in pairs(chestItems) do
+    totalstacks = totalstacks + 54
     for iter,j in pairs(items) do
       totitems = totitems + j["count"]
       usedstacks = usedstacks + 1
